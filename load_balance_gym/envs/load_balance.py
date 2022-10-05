@@ -8,8 +8,8 @@ from load_balance_gym.envs.wall_time import WallTime
 import gym
 from gym import error, spaces, utils
 
-from keras.models import Sequential
-from keras.layers import Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
 
 import pandas
 import numpy as np
