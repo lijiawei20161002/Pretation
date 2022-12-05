@@ -85,14 +85,6 @@ class LoadBalanceEnv(gym.Env):
 
     def observe(self):
         obs_arr = []
-        for server in self.servers:
-            load = sum(j.size for j in server.queue)
-            if server.curr_job is not None:
-                load += server.curr_job.finish_time - self.wall_time.curr_time
-            if load > self.obs_high[server.server_id]:
-                print('Server '+str(server.server_id)+' at time '+str(self.wall_time.curr_time)+' has load '+str(load)+' larger than obs_high '+str(self.obs_high[server.server_id]))
-                load = self.obs_high[server.server_id]
-            obs_arr.append(load)
         if self.incoming_job is None:
             obs_arr.append(0)
         else:
@@ -101,9 +93,19 @@ class LoadBalanceEnv(gym.Env):
                 obs_arr.append(self.obs_high[-1])
             else:
                 obs_arr.append(self.incoming_job.size)
+        for server in self.servers:
+            load = sum(j.size for j in server.queue)
+            if server.curr_job is not None:
+                load += server.curr_job.finish_time - self.wall_time.curr_time
+            if load > self.obs_high[server.server_id]:
+                print('Server '+str(server.server_id)+' at time '+str(self.wall_time.curr_time)+' has load '+str(load)+' larger than obs_high '+str(self.obs_high[server.server_id]))
+                load = self.obs_high[server.server_id]
+            obs_arr.append(load)
 
         obs_arr = np.array(obs_arr)
         assert self.contains(self.observation_space, obs_arr)
+
+        #print(obs_arr)
 
         return obs_arr
 

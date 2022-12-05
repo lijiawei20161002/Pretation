@@ -1,7 +1,12 @@
 from load_balance_gym.envs.param import config
 
 def generate_job(np_random):
-    size = int((np_random.pareto(config.job_size_pareto_shape)+1)*config.job_size_pareto_scale)
+    #size = int((np_random.pareto(config.job_size_pareto_shape)+1)*config.job_size_pareto_scale)
+    p = np_random.random()
+    if p < 0.9:
+        size = 1
+    else:
+        size = 100
     t = int(np_random.exponential(config.job_interval))
     return t, size
 
