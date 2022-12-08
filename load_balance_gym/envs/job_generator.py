@@ -6,7 +6,7 @@ def generate_job(np_random):
     if p < 0.9:
         size = 1
     else:
-        size = 100
+        size = 10
     t = int(np_random.exponential(config.job_interval))
     return t, size
 

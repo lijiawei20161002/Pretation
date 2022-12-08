@@ -1,3 +1,6 @@
+import numpy as np
+from load_balance_gym.envs.param import config
+
 class MCControl:
     def __init__(self, env, num_states, num_actions, epsilon, gamma):
         self.env = env
@@ -12,6 +15,7 @@ class MCControl:
         episode_len = np.array([None] * num_episodes)
 
         for episode in range(num_episodes):
+            print('MCControl: episode ', episode)
             state_action_reward = self.generate_episode(self.policy)
             G = self.calculate_returns(state_action_reward)
             self.evaluate_policy(G)
@@ -23,7 +27,7 @@ class MCControl:
             rewards_per_episode[episode] = total_return
             episode_len = len(state_action_reward)
 
-        final_policy = self.argmax(seelf.Q, self.policy)
+        final_policy = self.argmax(self.Q, self.policy)
 
         if verbose:
             print(f"Finished training RL agent for {num_episodes} episodes!")
@@ -31,7 +35,7 @@ class MCControl:
         return self.Q, final_policy, rewards_per_episode, episode_len
 
     def init_agent(self):
-        self.policy = np.random.choice(num_actions, num_states)
+        self.policy = np.random.choice(self.num_actions, self.num_states)
         self.Q = {}
         self.visit_count = {}
 
@@ -42,20 +46,26 @@ class MCControl:
                 self.Q[state][action] = 0
                 self.visit_count[state][action] = 0
 
+    def tuple_to_num(self, s):
+        state = 0
+        for pos in range(len(s)):
+            state = state * config.load_balance_queue_size + s[pos]
+        return state
+
     def generate_episode(self, policy):
         G = 0
-        s = env.reset()
-        a = policy[s]
-
-        state_action_reward = [(s, a, 0)]
+        s = self.env.reset()
+        state = self.tuple_to_num(s)
+        a = policy[state]
+        state_action_reward = [(state, a, 0)]
         while True:
-            s, r, terminated, _ = env.step(a)
+            s, r, terminated, _ = self.env.step(a)
             if terminated:
-                state_action_reward.append((s, None, r))
+                state_action_reward.append((state, None, r))
                 break
             else:
-                a = policy[s]
-                state_action_reward.append((s, a, r))
+                a = policy[state]
+                state_action_reward.append((state, a, r))
         return state_action_reward
 
     def calculate_returns(self, state_action_reward):
@@ -69,7 +79,7 @@ class MCControl:
                     G[state][action] = 0
             for s in G.keys():
                 for a in G[s].keys():
-                    G[s][a] += reward * gamma ** t
+                    G[s][a] += reward * self.gamma ** t
             t += 1
         return G
 
@@ -82,9 +92,9 @@ class MCControl:
         return self.Q
 
     def improve_policy(self):
-        self.policy = argmax(Q, self.policy)
-        for state in range(self.num_state):
-            self.policy[state] = get_epsilon_greedy_action(self.policy[state])
+        self.policy = self.argmax(self.Q, self.policy)
+        for state in range(self.num_states):
+            self.policy[state] = self.get_epsilon_greedy_action(self.policy[state])
         return self.policy
 
     def argmax(self, Q, policy):
@@ -103,5 +113,5 @@ class MCControl:
         if prob < 1 - self.epsilon:
             next_action = greedy_action
         else:
-            next_action = np.random.choice(self.num_action, 1)
+            next_action = np.random.choice(self.num_actions, 1)
         return next_action

@@ -18,10 +18,9 @@ class LoadBalanceEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def setup_space(self):
-        self.obs_low = np.array([0] * (config.num_servers + 1))
-        self.obs_high = np.array([config.load_balance_obs_high] * (config.num_servers +1))
-        self.observation_space = spaces.Box(
-            low=self.obs_low, high=self.obs_high, dtype=np.float32)
+        self.queue_size = config.load_balance_queue_size
+        self.queue = np.array([spaces.Discrete(config.load_balance_queue_size)] * (config.num_servers +1))
+        self.observation_space = spaces.Tuple(self.queue)
         self.action_space = spaces.Discrete(config.num_servers)
 
     def np_random(self, seed=42):
@@ -88,29 +87,30 @@ class LoadBalanceEnv(gym.Env):
         if self.incoming_job is None:
             obs_arr.append(0)
         else:
-            if self.incoming_job.size > self.obs_high[-1]:
+            if self.incoming_job.size > self.queue_size:
                 print('Incoming job at time '+str(self.wall_time.curr_time)+' has size '+str(self.incoming_job.size)+' larger than obs_high '+str(self.obs_high[-1]))
-                obs_arr.append(self.obs_high[-1])
+                obs_arr.append(self.queue_size)
             else:
                 obs_arr.append(self.incoming_job.size)
         for server in self.servers:
             load = sum(j.size for j in server.queue)
             if server.curr_job is not None:
                 load += server.curr_job.finish_time - self.wall_time.curr_time
-            if load > self.obs_high[server.server_id]:
+            if load > self.queue_size:
                 print('Server '+str(server.server_id)+' at time '+str(self.wall_time.curr_time)+' has load '+str(load)+' larger than obs_high '+str(self.obs_high[server.server_id]))
-                load = self.obs_high[server.server_id]
+                load = self.queue_size
             obs_arr.append(load)
 
-        obs_arr = np.array(obs_arr)
-        assert self.contains(self.observation_space, obs_arr)
+        obs_arr = tuple(np.array(obs_arr))
+        #assert self.contains(self.observation_space, obs_arr)
 
         #print(obs_arr)
 
         return obs_arr
 
     def step(self, action):
-        assert self.action_space.contains(action)
+        #print('=======action!!', action)
+        #assert self.action_space.contains(action)
         self.servers[action].schedule(self.incoming_job)
         running_job = self.servers[action].process()
         if running_job is not None:

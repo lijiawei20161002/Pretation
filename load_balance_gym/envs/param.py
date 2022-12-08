@@ -20,6 +20,6 @@ parser.add_argument('--service_rates', type=float, default=[1.0] *2, #(0.15 + (p
 parser.add_argument('--job_interval', type=int, default=5, help='job arrival interval (default: 55)')
 parser.add_argument('--job_size_pareto_shape', type=float, default=1.5, help='pareto job size distribution shape (default: 1.5)')
 parser.add_argument('--job_size_pareto_scale', type=float, default=1000.0, help='pareto job size distribution scale (default: 100.0)')
-parser.add_argument('--load_balance_obs_high', type=float, default=50000000000000.0, help='observation cap for load balance env (default: 500000.0)')
+parser.add_argument('--load_balance_queue_size', type=int, default=200, help='observation cap for load balance env (default: 500000.0)')
 
 config, _ = parser.parse_known_args()

@@ -4,7 +4,7 @@ import seaborn as sns
 import pandas as pd
 from os.path import exists
 from load_balance_gym.envs.param import config
-from MCControl import MCControl
+from tabular_algs.MCControl import MCControl
 import numpy as np
 from stable_baselines.deepq.policies import MlpPolicy as mlp_dqn
 from stable_baselines.common.policies import MlpPolicy as mlp
@@ -35,7 +35,7 @@ goal_selection_strategy = 'future'
 n_episodes = 25000
 
 # add GAIL later
-algs = ['TRPO']
+algs = []
 #algs = ['A2C', 'ACER', 'ACKTR', 'DQN', 'PPO1', 'PPO2', 'TRPO']
 '''
 models = ['model_A2C = A2C(mlp, env, verbose=1, tensorboard_log="./log/")',
@@ -46,7 +46,7 @@ models = ['model_A2C = A2C(mlp, env, verbose=1, tensorboard_log="./log/")',
 'model_PPO2 = PPO2(mlp, env, verbose=1, tensorboard_log="./log/")',
 'model_TRPO = TRPO(mlp, env, verbose=1, tensorboard_log="./log/")'
 ]'''
-models = ['model_TRPO = TRPO(mlp, env, verbose=1, tensorboard_log="./log/")']
+models = [] 
 '''
 trains = ['model_A2C.learn(total_timesteps=n_episodes)',
 'model_ACER.learn(total_timesteps=n_episodes)',
@@ -56,7 +56,7 @@ trains = ['model_A2C.learn(total_timesteps=n_episodes)',
 'model_PPO2.learn(total_timesteps=n_episodes)',
 'model_TRPO.learn(total_timesteps=n_episodes)'
 ]'''
-trains = ['model_TRPO.learn(total_timesteps=n_episodes)']
+trains = [] 
 
 print('env.action_space', env.action_space)
 #plt.yscale('symlog')
@@ -92,19 +92,31 @@ for iter in range(n_iter):
                 rewards.append(reward)
         df = df.append(pd.DataFrame({'alg': alg, 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
 
-    # Monte Carlo Control
-    #mc = MCControl(env, len(env.observation_space), config.num_servers, 0.1, 0.1)
-    #policy = mc.run_mc_control(1000)
-    #obs = env.reset()
-    #rewards = []
+    # First-visit Monte Carlo Control
+    print('============== first-visit Monte Carlo ===================')
+    mc = MCControl(env, config.load_balance_queue_size**(config.num_servers+1), config.num_servers, 0.1, 0.1)
+    policy = mc.run_mc_control(10)
+    obs = env.reset()
+    rewards = []
+    state = 0
+    for step in range(n_steps):
+        #exec('action, _states = model.predict(obs)')
+        action = policy[state]
+        state, reward, done, info = env.step(action)
+        if step > 0:
+            rewards.append(reward+rewards[step-1])
+        else:
+            rewards.append(reward)
+        print(state, action, reward)
+    df = df.append(pd.DataFrame({'alg': 'monte carlo control', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
     
     # expert 
     print('============== expert ===================')
     obs = env.reset()
     rewards = []
     #if not exists('expert_load_balance.npz'):
-    generate_expert_traj(expert, 'expert_load_balance', env, n_episodes=10000)
-    dataset = ExpertDataset(expert_path='expert_load_balance.npz', traj_limitation=100, batch_size=128)
+    generate_expert_traj(expert, 'data/expert_load_balance', env, n_episodes=10000)
+    dataset = ExpertDataset(expert_path='data/expert_load_balance.npz', traj_limitation=100, batch_size=128)
     model = TRPO(mlp, env, verbose=1, tensorboard_log="./log/")
     model.pretrain(dataset, n_epochs=100)
     #model.learn(total_timesteps=n_episodes)
