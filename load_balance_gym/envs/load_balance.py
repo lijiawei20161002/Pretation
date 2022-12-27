@@ -19,8 +19,8 @@ class LoadBalanceEnv(gym.Env):
 
     def setup_space(self):
         self.queue_size = config.load_balance_queue_size
-        self.queue = np.array([spaces.Discrete(config.load_balance_queue_size)] * (config.num_servers +1))
-        self.observation_space = spaces.Tuple(self.queue)
+        self.queue = [self.queue_size] * (config.num_servers +1)
+        self.observation_space = spaces.MultiDiscrete(self.queue)
         self.action_space = spaces.Discrete(config.num_servers)
 
     def np_random(self, seed=42):
@@ -97,9 +97,9 @@ class LoadBalanceEnv(gym.Env):
             if server.curr_job is not None:
                 load += server.curr_job.finish_time - self.wall_time.curr_time
             if load > self.queue_size:
-                print('Server '+str(server.server_id)+' at time '+str(self.wall_time.curr_time)+' has load '+str(load)+' larger than obs_high '+str(self.obs_high[server.server_id]))
+                #print('Server '+str(server.server_id)+' at time '+str(self.wall_time.curr_time)+' has load '+str(load)+' larger than obs_high '+str(self.obs_high[server.server_id]))
                 load = self.queue_size
-            obs_arr.append(load)
+            obs_arr.append(int(load))
 
         obs_arr = tuple(np.array(obs_arr))
         #assert self.contains(self.observation_space, obs_arr)

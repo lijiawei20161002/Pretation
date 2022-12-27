@@ -8,6 +8,7 @@ class MCControl:
         self.num_actions = num_actions
         self.epsilon = epsilon
         self.gamma = gamma
+        self.init_agent()
 
     def run_mc_control(self, num_episodes, verbose=True):
         self.init_agent()
@@ -19,6 +20,7 @@ class MCControl:
             state_action_reward = self.generate_episode(self.policy)
             G = self.calculate_returns(state_action_reward)
             self.evaluate_policy(G)
+            #print(self.Q[self.tuple_to_num((1,0,0))])
             self.improve_policy()
 
             total_return = 0
@@ -47,46 +49,47 @@ class MCControl:
                 self.visit_count[state][action] = 0
 
     def tuple_to_num(self, s):
-        state = 0
         for pos in range(len(s)):
-            state = state * config.load_balance_queue_size + s[pos]
-        return state
+            if s[pos] >= config.load_balance_queue_size:
+                return config.load_balance_queue_size-1
+        return (s[0]//100)*config.load_balance_queue_size**2 + s[1]*config.load_balance_queue_size + s[2]
 
     def generate_episode(self, policy):
-        G = 0
         s = self.env.reset()
         state = self.tuple_to_num(s)
         a = policy[state]
         state_action_reward = [(state, a, 0)]
         while True:
             s, r, terminated, _ = self.env.step(a)
+            state_action_reward.append((self.tuple_to_num(s), a, r))
             if terminated:
-                state_action_reward.append((state, None, r))
                 break
             else:
-                a = policy[state]
-                state_action_reward.append((state, a, r))
+                a = policy[self.tuple_to_num(s)]
         return state_action_reward
 
     def calculate_returns(self, state_action_reward):
         G = {}
+        idx = {}
         t = 0
         for state, action, reward in state_action_reward:
             if state not in G:
                 G[state] = {action: 0}
+                idx[state] = {action: t}
             else:
                 if action not in G[state]:
                     G[state][action] = 0
+                    idx[state][action] = t
             for s in G.keys():
                 for a in G[s].keys():
-                    G[s][a] += reward * self.gamma ** t
+                    G[s][a] += reward * self.gamma ** (t-idx[s][a])
             t += 1
         return G
 
     def evaluate_policy(self, G):
         for state in G.keys():
             for action in G[state].keys():
-                if action:
+                if action == self.policy[state]:
                     self.visit_count[state][action] += 1
                     self.Q[state][action] += 1/self.visit_count[state][action]*(G[state][action]-self.Q[state][action])
         return self.Q
@@ -103,8 +106,9 @@ class MCControl:
             best_action = None
             best_value = float('-inf')
             for action in range(self.num_actions):
-                if self.Q[state][action] > best_value:
+                if Q[state][action] > best_value:
                     best_action = action
+                    best_value = self.Q[state][action]
             next_policy[state] = best_action
         return next_policy
 

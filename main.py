@@ -36,34 +36,31 @@ n_episodes = 25000
 
 # add GAIL later
 algs = []
-#algs = ['A2C', 'ACER', 'ACKTR', 'DQN', 'PPO1', 'PPO2', 'TRPO']
-'''
+# algs = ['A2C', 'ACKTR']
 models = ['model_A2C = A2C(mlp, env, verbose=1, tensorboard_log="./log/")',
-'model_ACER = ACER(mlp, env, verbose=1, tensorboard_log="./log/")',
+#'model_ACER = ACER(mlp, env, verbose=1, tensorboard_log="./log/")',
 'model_ACKTR = ACKTR(mlp, env, verbose=1, tensorboard_log="./log/")',
-'model_DQN = DQN(mlp_dqn, env, verbose=1, tensorboard_log="./log/")',
-'model_PPO1 = PPO1(mlp, env, verbose=1, tensorboard_log="./log/")',
-'model_PPO2 = PPO2(mlp, env, verbose=1, tensorboard_log="./log/")',
-'model_TRPO = TRPO(mlp, env, verbose=1, tensorboard_log="./log/")'
-]'''
-models = [] 
-'''
+#'model_DQN = DQN(mlp_dqn, env, verbose=1, tensorboard_log="./log/")',
+#'model_PPO1 = PPO1(mlp, env, verbose=1, tensorboard_log="./log/")',
+#'model_PPO2 = PPO2(mlp, env, verbose=1, tensorboard_log="./log/")',
+#'model_TRPO = TRPO(mlp, env, verbose=1, tensorboard_log="./log/")'
+]
+
 trains = ['model_A2C.learn(total_timesteps=n_episodes)',
-'model_ACER.learn(total_timesteps=n_episodes)',
+#'model_ACER.learn(total_timesteps=n_episodes)',
 'model_ACKTR.learn(total_timesteps=n_episodes)',
-'model_DQN.learn(total_timesteps=n_episodes)',
-'model_PPO1.learn(total_timesteps=n_episodes)',
-'model_PPO2.learn(total_timesteps=n_episodes)',
-'model_TRPO.learn(total_timesteps=n_episodes)'
-]'''
-trains = [] 
+#'model_DQN.learn(total_timesteps=n_episodes)',
+#'model_PPO1.learn(total_timesteps=n_episodes)',
+#'model_PPO2.learn(total_timesteps=n_episodes)',
+#'model_TRPO.learn(total_timesteps=n_episodes)'
+]
 
 print('env.action_space', env.action_space)
 #plt.yscale('symlog')
 sns.set_style("darkgrid", {'axes.grid': True, 'axes.edgecolor':'black'})
 
-n_steps = 50
-n_iter = 1
+n_steps = 100
+n_iter = 100
 df = pd.DataFrame(columns=['alg', 'step', 'cumulative reward'])
 
 def expert(obs):
@@ -78,39 +75,67 @@ for iter in range(n_iter):
     for i in range(len(algs)):
         alg = algs[i]
         print(alg)
-        obs = env.reset()
         rewards = []
-        exec(models[i])
-        exec(trains[i])
+        if iter < 1:
+            exec(models[i])
+            exec(trains[i])
+        step = 0
+        for ep in range(n_steps//config.num_stream_jobs):
+            obs = env.reset()
+            for _ in range(config.num_stream_jobs):
+                exec('action, _states = model_'+alg+'.predict(obs)')
+                state, reward, done, info = env.step(action)
+                if step > 0:
+                    rewards.append(reward+rewards[step-1])
+                else:
+                    rewards.append(reward)
+                step += 1
+        df = df.append(pd.DataFrame({'alg': alg, 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
+
+    # random
+    print('============== random ===================')
+    rewards = []
+    step = 0
+    for ep in range(n_steps//config.num_stream_jobs):
         obs = env.reset()
-        for step in range(n_steps):
-            exec('action, _states = model_'+alg+'.predict(obs)')
+        for _ in range(config.num_stream_jobs):
+            action = random.randint(0, config.num_servers-1)
             state, reward, done, info = env.step(action)
             if step > 0:
                 rewards.append(reward+rewards[step-1])
             else:
                 rewards.append(reward)
-        df = df.append(pd.DataFrame({'alg': alg, 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
+            step += 1
+            #print(state, action, reward)
+    df = df.append(pd.DataFrame({'alg': 'random', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
+
 
     # First-visit Monte Carlo Control
     print('============== first-visit Monte Carlo ===================')
-    mc = MCControl(env, config.load_balance_queue_size**(config.num_servers+1), config.num_servers, 0.1, 0.1)
-    policy = mc.run_mc_control(10)
-    obs = env.reset()
+    if iter < 1:
+        mc = MCControl(env, config.load_balance_queue_size**(config.num_servers)*2, config.num_servers, 0.1, 0.9)
+        policy = mc.run_mc_control(1000)[1]
     rewards = []
-    state = 0
-    for step in range(n_steps):
-        #exec('action, _states = model.predict(obs)')
-        action = policy[state]
-        state, reward, done, info = env.step(action)
-        if step > 0:
-            rewards.append(reward+rewards[step-1])
-        else:
-            rewards.append(reward)
-        print(state, action, reward)
+    step = 0
+    for ep in range(n_steps//config.num_stream_jobs):
+        obs = env.reset()
+        state = 0
+        for _ in range(config.num_stream_jobs):
+            #print(state)
+            action = policy[state]
+            #print('=====policy: ', policy)
+            state, reward, done, info = env.step(action)
+            if step > 0:
+                rewards.append(reward+rewards[step-1])
+            else:
+                rewards.append(reward)
+            step += 1
+            print(state, action, reward, mc.Q[mc.tuple_to_num(state)], policy[mc.tuple_to_num(state)])
+            state = mc.tuple_to_num(state)
     df = df.append(pd.DataFrame({'alg': 'monte carlo control', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
-    
+
     # expert 
+    '''
     print('============== expert ===================')
     obs = env.reset()
     rewards = []
@@ -128,60 +153,52 @@ for iter in range(n_iter):
         else:
             rewards.append(reward)
         print(state, action, reward)
-    df = df.append(pd.DataFrame({'alg': 'expert', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
-
-
-    # random
-    print('============== random ===================')
-    obs = env.reset()
-    rewards = []
-    for step in range(n_steps):
-        action = random.randint(0, config.num_servers-1)
-        state, reward, done, info = env.step(action)
-        if step > 0:
-            rewards.append(reward+rewards[step-1])
-        else:
-            rewards.append(reward)
-        print(state, action, reward)
-    df = df.append(pd.DataFrame({'alg': 'random', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
+    df = df.append(pd.DataFrame({'alg': 'expert', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)'''
 
 
     # join the shortest queue
     print('============== shortest queue ===================')
-    obs = env.reset()
     rewards = []
-    action = 0
-    for step in range(n_steps):
-        state, reward, done, info = env.step(action)
-        action = np.argmin(state[1:])
-        if step > 0:
-            rewards.append(reward+rewards[step-1])
-        else:
-            rewards.append(reward)
-        print(state, action, reward)
+    step = 0
+    for ep in range(n_steps//config.num_stream_jobs):
+        obs = env.reset()
+        action = 0
+        for _ in range(config.num_stream_jobs):
+            state, reward, done, info = env.step(action)
+            action = np.argmin(state[1:])
+            if step > 0:
+                rewards.append(reward+rewards[step-1])
+            else:
+                rewards.append(reward)
+            step += 1
+            #print(state, action, reward)
     df = df.append(pd.DataFrame({'alg': 'shortest_queue', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
 
 
     # save a dedicated server for short jobs
     print('============== dedicated server ===================')
-    threshold = 50
-    obs = env.reset()
+    threshold = 1
     rewards = []
-    action = 1
-    for step in range(n_steps):
-        state, reward, done, info = env.step(action)
-        if state[0] < threshold:
-            action = 0
-        else:
-            action = np.argmin(state[2:]) + 1
-        if step > 0:
-            rewards.append(reward+rewards[step-1])
-        else:
-            rewards.append(reward)
-        print(state, action, reward)
+    step = 0
+    for ep in range(n_steps//config.num_stream_jobs):
+        obs = env.reset()
+        action = 1
+        for _ in range(config.num_stream_jobs):
+            state, reward, done, info = env.step(action)
+            if state[0] > threshold:
+                action = np.argmin(state[2:]) + 1
+            else:
+                action = np.argmin(state[1:]) 
+            if step > 0:
+                rewards.append(reward+rewards[step-1])
+            else:
+                rewards.append(reward)
+            step += 1
+            #print(state, action, reward)
     df = df.append(pd.DataFrame({'alg': 'dedicated_server', 'step': range(n_steps), 'cumulative reward': rewards}), ignore_index=True)
 
-algs.append('expert')
+algs.append('monte carlo control')
+#algs.append('expert')
 algs.append('random')
 algs.append('shortest_queue')
 algs.append('dedicated_server')
